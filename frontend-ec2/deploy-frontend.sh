@@ -115,7 +115,7 @@ print_status "Firewall configured"
 
 echo ""
 echo -e "${GREEN}================================${NC}"
-echo -e "${GREEN}✓ Frontend Deployment Complete!${NC}"
+echo -e "${GREEN}Frontend Deployment Complete!${NC}"
 echo -e "${GREEN}================================${NC}"
 echo ""
 
