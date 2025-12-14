@@ -210,8 +210,13 @@ export default defineConfig({
 
 #### frontend-ec2/.env.example
 ```env
-# Backend API URL (IP address of Backend EC2 instance)
-VITE_BACKEND_URL=http://BACKEND_EC2_IP:3000
+# Frontend Configuration
+# IMPORTANT: This should be your Frontend EC2 PUBLIC IP or domain
+# Nginx will proxy /api/ requests to the Backend EC2
+# DO NOT use Backend EC2 IP here - the browser cannot reach private IPs
+
+# Frontend Public URL (used by browser to access API through nginx proxy)
+VITE_BACKEND_URL=http://FRONTEND_EC2_PUBLIC_IP
 ```
 
 #### frontend-ec2/index.html
@@ -972,9 +977,9 @@ app.use((err, req, res, next) => {
 
 // Start server - Listen on all interfaces for EC2
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📊 Environment: ${NODE_ENV}`);
-  console.log(`🔗 API available at: http://0.0.0.0:${PORT}/api`);
+  console.log(`Server running on port ${PORT}`);
+  console.log(`Environment: ${NODE_ENV}`);
+  console.log(`API available at: http://0.0.0.0:${PORT}/api`);
 });
 ```
 
@@ -985,11 +990,12 @@ PORT=3000
 NODE_ENV=production
 
 # Database EC2 Connection String
+# IMPORTANT: Use the exact password from database setup (check for typos like 0 vs o)
 # Format: postgresql://username:password@database-ec2-private-ip:5432/database_name
-DATABASE_URL=postgresql://bmi_user:YOUR_PASSWORD@DATABASE_EC2_PRIVATE_IP:5432/bmidb
+DATABASE_URL=postgresql://bmi_user:YOUR_DB_PASSWORD@DATABASE_EC2_PRIVATE_IP:5432/bmidb
 
 # Frontend EC2 URL (for CORS)
-# Use Frontend EC2 Public IP or Domain
+# Use Frontend EC2 Public IP or Domain (without port 80)
 FRONTEND_URL=http://FRONTEND_EC2_PUBLIC_IP
 ```
 
@@ -1185,7 +1191,7 @@ server {
 
     # Proxy API requests to Backend EC2
     location /api/ {
-        proxy_pass http://BACKEND_EC2_PRIVATE_IP:3000/api/;
+        proxy_pass http://BACKEND_EC2_PRIVATE_IP:3000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -1248,6 +1254,438 @@ COMMENT ON TABLE measurements IS 'Stores user health measurements including BMI,
 
 -- Display confirmation
 SELECT 'Migration 001 completed successfully - measurements table created' AS status;
+```
+
+---
+
+## Deployment Scripts
+
+### Frontend Deployment Script
+
+#### frontend-ec2/deploy-frontend.sh
+```bash
+#!/bin/bash
+
+# BMI Health Tracker - Frontend EC2 Deployment Script
+# This script sets up the frontend on an Ubuntu EC2 instance
+
+set -e
+
+echo "BMI Health Tracker - Frontend EC2 Deployment"
+echo "================================================"
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+print_status() { echo -e "${GREEN}[OK]${NC} $1"; }
+print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+print_info() { echo -e "${YELLOW}[INFO]${NC} $1"; }
+
+# Update system
+print_info "Updating system packages..."
+sudo apt update && sudo apt upgrade -y
+print_status "System updated"
+
+# Install Node.js using NVM
+print_info "Installing Node.js..."
+if ! command -v node &> /dev/null; then
+    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
+    export NVM_DIR="$HOME/.nvm"
+    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+    nvm install --lts
+    nvm use --lts
+fi
+print_status "Node.js $(node -v) installed"
+
+# Install Nginx
+print_info "Installing Nginx..."
+sudo apt install -y nginx
+sudo systemctl enable nginx
+print_status "Nginx installed"
+
+# Check if .env file exists
+if [ ! -f .env ]; then
+    print_error ".env file not found"
+    print_info "Please create .env file from .env.example"
+    print_info "Set VITE_BACKEND_URL to your Frontend EC2 PUBLIC IP (e.g., http://52.24.187.55)"
+    exit 1
+fi
+
+# Load environment variables
+source .env
+print_status ".env file loaded"
+
+# Install dependencies
+print_info "Installing frontend dependencies..."
+npm install
+npm install -D terser
+print_status "Dependencies installed"
+
+# Build frontend
+print_info "Building frontend for production..."
+npm run build
+print_status "Frontend built successfully"
+
+# Deploy to nginx directory
+print_info "Deploying frontend to /var/www/bmi-health-tracker..."
+sudo mkdir -p /var/www/bmi-health-tracker
+sudo rm -rf /var/www/bmi-health-tracker/*
+sudo cp -r dist/* /var/www/bmi-health-tracker/
+sudo chown -R www-data:www-data /var/www/bmi-health-tracker
+print_status "Frontend deployed"
+
+# Configure Nginx
+print_info "Configuring Nginx..."
+
+# We need the backend PRIVATE IP for nginx proxy, not the public frontend IP
+# Backend EC2 private IP should be provided via environment or discovered
+if [ -z "$BACKEND_PRIVATE_IP" ]; then
+    print_info "BACKEND_PRIVATE_IP not set, please provide it:"
+    read -p "Enter Backend EC2 Private IP: " BACKEND_PRIVATE_IP
+fi
+
+if [ ! -z "$BACKEND_PRIVATE_IP" ]; then
+    # Get EC2 public IP using IMDSv2
+    TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" \
+      -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+    PUBLIC_IP=$(curl -s \
+      -H "X-aws-ec2-metadata-token: $TOKEN" \
+      http://169.254.169.254/latest/meta-data/public-ipv4)
+    
+    # Update nginx config with backend IP
+    sudo cp nginx.conf /etc/nginx/sites-available/bmi-frontend
+    sudo sed -i "s/BACKEND_EC2_PRIVATE_IP/$BACKEND_PRIVATE_IP/g" /etc/nginx/sites-available/bmi-frontend
+    sudo sed -i "s/YOUR_FRONTEND_DOMAIN_OR_IP/$PUBLIC_IP/g" /etc/nginx/sites-available/bmi-frontend
+    
+    # Enable site
+    sudo ln -sf /etc/nginx/sites-available/bmi-frontend /etc/nginx/sites-enabled/
+    sudo rm -f /etc/nginx/sites-enabled/default
+    
+    # Test and reload nginx
+    sudo nginx -t
+    sudo systemctl reload nginx
+    print_status "Nginx configured and reloaded"
+else
+    print_error "BACKEND_PRIVATE_IP not provided"
+    exit 1
+fi
+
+# Configure firewall
+print_info "Configuring firewall..."
+sudo ufw allow 'Nginx Full'
+sudo ufw allow OpenSSH
+sudo ufw --force enable
+print_status "Firewall configured"
+
+echo ""
+echo -e "${GREEN}================================${NC}"
+echo -e "${GREEN}Frontend Deployment Complete!${NC}"
+echo -e "${GREEN}================================${NC}"
+echo ""
+
+# Get EC2 public IP using IMDSv2 (reuse token if within TTL, or get new one)
+if [ -z "$PUBLIC_IP" ]; then
+    TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" \
+      -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+    PUBLIC_IP=$(curl -s \
+      -H "X-aws-ec2-metadata-token: $TOKEN" \
+      http://169.254.169.254/latest/meta-data/public-ipv4)
+fi
+
+echo "Frontend URL: http://$PUBLIC_IP"
+echo ""
+echo "Next Steps:"
+echo "1. Access the application in your browser"
+echo "2. Ensure Backend EC2 is running and accessible"
+echo "3. Check Nginx logs: sudo tail -f /var/log/nginx/bmi-frontend-error.log"
+echo ""
+```
+
+### Backend Deployment Script
+
+#### backend-ec2/deploy-backend.sh
+```bash
+#!/bin/bash
+
+# BMI Health Tracker - Backend EC2 Deployment Script
+# This script sets up the backend on an Ubuntu EC2 instance
+
+set -e
+
+echo "BMI Health Tracker - Backend EC2 Deployment"
+echo "==============================================="
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+print_status() { echo -e "${GREEN}[OK]${NC} $1"; }
+print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+print_info() { echo -e "${YELLOW}[INFO]${NC} $1"; }
+
+# Update system
+print_info "Updating system packages..."
+sudo apt update && sudo apt upgrade -y
+print_status "System updated"
+
+# Install Node.js using NVM
+print_info "Installing Node.js..."
+if ! command -v node &> /dev/null; then
+    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
+    export NVM_DIR="$HOME/.nvm"
+    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+    nvm install --lts
+    nvm use --lts
+fi
+print_status "Node.js $(node -v) installed"
+
+# Install PostgreSQL client for testing connection
+print_info "Installing PostgreSQL client..."
+sudo apt install -y postgresql-client
+print_status "PostgreSQL client installed"
+
+# Install PM2
+print_info "Installing PM2..."
+if ! command -v pm2 &> /dev/null; then
+    npm install -g pm2
+fi
+print_status "PM2 installed"
+
+# Check if .env file exists
+if [ ! -f .env ]; then
+    print_error ".env file not found"
+    print_info "Please create .env file from .env.example and configure:"
+    print_info "  - DATABASE_URL with Database EC2 IP"
+    print_info "  - FRONTEND_URL with Frontend EC2 IP"
+    exit 1
+fi
+
+# Load environment variables
+source .env
+print_status ".env file loaded"
+
+# Test database connection
+print_info "Testing database connection..."
+if psql "$DATABASE_URL" -c "SELECT 1" > /dev/null 2>&1; then
+    print_status "Database connection successful"
+else
+    print_error "Database connection failed"
+    print_info "Please verify DATABASE_URL in .env file"
+    print_info "Ensure Database EC2 Security Group allows port 5432 from Backend SG"
+    exit 1
+fi
+
+# Install dependencies
+print_info "Installing backend dependencies..."
+npm install
+print_status "Dependencies installed"
+
+# Create logs directory
+mkdir -p logs
+print_status "Logs directory created"
+
+# Stop existing PM2 process if running
+print_info "Stopping existing backend process..."
+pm2 stop bmi-backend 2>/dev/null || true
+pm2 delete bmi-backend 2>/dev/null || true
+print_status "Existing process stopped"
+
+# Start backend with PM2
+print_info "Starting backend with PM2..."
+pm2 start ecosystem.config.js
+pm2 save
+print_status "Backend started with PM2"
+
+# Configure PM2 to start on system boot
+print_info "Configuring PM2 startup..."
+sudo env PATH=$PATH:/usr/bin pm2 startup systemd -u $USER --hp $HOME > /dev/null 2>&1 || true
+print_status "PM2 startup configured"
+
+# Configure firewall
+print_info "Configuring firewall..."
+sudo ufw allow 3000/tcp
+sudo ufw allow OpenSSH
+sudo ufw --force enable
+print_status "Firewall configured"
+
+echo ""
+echo -e "${GREEN}================================${NC}"
+echo -e "${GREEN}Backend Deployment Complete!${NC}"
+echo -e "${GREEN}================================${NC}"
+echo ""
+echo "Backend Status:"
+pm2 status
+echo ""
+
+# Get EC2 private IP using IMDSv2
+TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" \
+  -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+PRIVATE_IP=$(curl -s \
+  -H "X-aws-ec2-metadata-token: $TOKEN" \
+  http://169.254.169.254/latest/meta-data/local-ipv4)
+
+echo "Backend API: http://$PRIVATE_IP:3000"
+echo "Health Check: http://$PRIVATE_IP:3000/health"
+echo ""
+echo "Next Steps:"
+echo "1. Test health endpoint: curl http://localhost:3000/health"
+echo "2. Check PM2 logs: pm2 logs bmi-backend"
+echo "3. Update Frontend EC2 with this Backend EC2 IP address"
+echo "4. Ensure Security Group allows:"
+echo "   - Port 3000 from Frontend EC2 Security Group"
+echo "   - Port 5432 to Database EC2"
+echo ""
+```
+
+### Database Setup Script
+
+#### database-ec2/setup-database.sh
+```bash
+#!/bin/bash
+
+# BMI Health Tracker - Database EC2 Setup Script
+# This script sets up PostgreSQL on an Ubuntu EC2 instance
+
+set -e
+
+echo "BMI Health Tracker - Database EC2 Setup"
+echo "========================================="
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+print_status() { echo -e "${GREEN}[OK]${NC} $1"; }
+print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+print_info() { echo -e "${YELLOW}[INFO]${NC} $1"; }
+
+# Database credentials
+DB_USER="bmi_user"
+DB_NAME="bmidb"
+
+echo ""
+print_info "This script will:"
+echo "  1. Install PostgreSQL"
+echo "  2. Create database user: $DB_USER"
+echo "  3. Create database: $DB_NAME"
+echo "  4. Run migrations"
+echo "  5. Configure remote access"
+echo "  6. Setup firewall"
+echo ""
+
+# Generate secure random password
+DB_PASS=$(openssl rand -base64 12 | tr -dc 'a-zA-Z0-9' | head -c 16)
+print_info "Generated database password (SAVE THIS!):"
+echo ""
+echo "  Password: $DB_PASS"
+echo ""
+echo "Press Enter to continue..."
+read
+
+# Update system
+print_info "Updating system packages..."
+sudo apt update && sudo apt upgrade -y
+print_status "System updated"
+
+# Install PostgreSQL
+print_info "Installing PostgreSQL..."
+sudo apt install -y postgresql postgresql-contrib
+sudo systemctl enable postgresql
+sudo systemctl start postgresql
+print_status "PostgreSQL installed and running"
+
+# Create database user and database
+print_info "Creating database user and database..."
+sudo -u postgres psql <<EOF
+-- Create user
+CREATE USER $DB_USER WITH PASSWORD '$DB_PASS';
+
+-- Create database
+CREATE DATABASE $DB_NAME OWNER $DB_USER;
+
+-- Grant privileges
+GRANT ALL PRIVILEGES ON DATABASE $DB_NAME TO $DB_USER;
+
+-- Connect to database and grant schema privileges
+\c $DB_NAME
+GRANT ALL ON SCHEMA public TO $DB_USER;
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO $DB_USER;
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO $DB_USER;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO $DB_USER;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO $DB_USER;
+EOF
+print_status "Database user and database created"
+
+# Run migrations
+print_info "Running database migrations..."
+sudo -u postgres psql -d $DB_NAME -f migrations/001_create_measurements.sql
+print_status "Migrations completed"
+
+# Get EC2 private IP using IMDSv2
+print_info "Retrieving EC2 metadata..."
+TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" \
+  -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+PRIVATE_IP=$(curl -s \
+  -H "X-aws-ec2-metadata-token: $TOKEN" \
+  http://169.254.169.254/latest/meta-data/local-ipv4)
+print_info "EC2 Private IP: $PRIVATE_IP"
+
+# Configure PostgreSQL for remote access
+print_info "Configuring PostgreSQL for remote access..."
+
+# Detect PostgreSQL version
+PG_VERSION=$(sudo ls /etc/postgresql/ | head -n 1)
+PG_CONF_DIR="/etc/postgresql/$PG_VERSION/main"
+print_info "Detected PostgreSQL version: $PG_VERSION"
+
+# Backup original configs
+sudo cp $PG_CONF_DIR/postgresql.conf $PG_CONF_DIR/postgresql.conf.backup
+sudo cp $PG_CONF_DIR/pg_hba.conf $PG_CONF_DIR/pg_hba.conf.backup
+
+# Update postgresql.conf to listen on all interfaces
+sudo sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '*'/" $PG_CONF_DIR/postgresql.conf
+
+# Update pg_hba.conf to allow connections from Backend EC2
+# Allow connections from private subnet (adjust CIDR as needed)
+echo "host    $DB_NAME    $DB_USER    10.0.0.0/16    md5" | sudo tee -a $PG_CONF_DIR/pg_hba.conf
+echo "host    $DB_NAME    $DB_USER    172.31.0.0/16   md5" | sudo tee -a $PG_CONF_DIR/pg_hba.conf
+
+print_status "PostgreSQL configured for remote access"
+
+# Restart PostgreSQL
+print_info "Restarting PostgreSQL..."
+sudo systemctl restart postgresql
+print_status "PostgreSQL restarted"
+
+# Configure firewall
+print_info "Configuring firewall..."
+sudo ufw allow 5432/tcp
+sudo ufw allow OpenSSH
+sudo ufw --force enable
+print_status "Firewall configured"
+
+echo ""
+echo -e "${GREEN}=====================================${NC}"
+echo -e "${GREEN}Database EC2 Setup Complete!${NC}"
+echo -e "${GREEN}=====================================${NC}"
+echo ""
+echo "Database Connection String:"
+echo "postgresql://$DB_USER:$DB_PASS@$PRIVATE_IP:5432/$DB_NAME"
+echo ""
+echo "IMPORTANT: Add this to Backend EC2 .env file as DATABASE_URL"
+echo ""
+echo "Next Steps:"
+echo "1. Update Backend EC2 Security Group to allow outbound to port 5432"
+echo "2. Update Database EC2 Security Group to allow inbound from Backend EC2"
+echo "3. Copy the connection string above to Backend EC2 .env file"
+echo ""
 ```
 
 ---

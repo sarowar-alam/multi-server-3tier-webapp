@@ -760,10 +760,13 @@ PORT=3000
 NODE_ENV=production
 
 # Use Database EC2 Private IP (from 10.0.144.0/20 subnet)
-DATABASE_URL=postgresql://bmi_user:BMI@Tracker2025!@10.0.144.15:5432/bmidb
+# IMPORTANT: Check database password carefully - verify from setup-database.sh output
+# Common mistake: confusing 0 (zero) with o (letter O)
+DATABASE_URL=postgresql://bmi_user:YOUR_DB_PASSWORD@10.0.144.15:5432/bmidb
 
-# Use Frontend EC2 Public IP (will get this in next section)
-FRONTEND_URL=http://FRONTEND_PUBLIC_IP
+# Use Frontend EC2 Public IP (Elastic IP assigned to Frontend)
+# Do NOT include port number - just the IP or domain
+FRONTEND_URL=http://FRONTEND_ELASTIC_IP
 ```
 
 Save and exit (Ctrl+X, Y, Enter)
@@ -966,18 +969,27 @@ nano .env
 
 **Edit .env file**:
 ```env
-# Use Backend EC2 Private IP (from 10.0.128.0/20 subnet)
-VITE_BACKEND_URL=http://10.0.128.20:3000
+# IMPORTANT: Use Frontend EC2 PUBLIC IP (Elastic IP), NOT Backend IP
+# Nginx will proxy /api/ requests to Backend EC2
+# The browser needs to access the frontend's public IP
+VITE_BACKEND_URL=http://FRONTEND_ELASTIC_IP
+
+# Example with your Elastic IP:
+# VITE_BACKEND_URL=http://52.24.187.55
 ```
 
 Save and exit
 
 ### Step 3: Deploy Frontend Application
 
+**When running the deployment script, you'll be prompted for Backend Private IP:**
+
 ```bash
 # On Frontend EC2
 chmod +x deploy-frontend.sh
 ./deploy-frontend.sh
+
+# When prompted, enter Backend EC2 Private IP (e.g., 10.0.128.20)
 ```
 
 The script will:

@@ -18,12 +18,6 @@ print_status() { echo -e "${GREEN}[OK]${NC} $1"; }
 print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 print_info() { echo -e "${YELLOW}[INFO]${NC} $1"; }
 
-# Check if running as root
-if [ "$EUID" -eq 0 ]; then 
-   print_error "Please do not run as root"
-   exit 1
-fi
-
 # Update system
 print_info "Updating system packages..."
 sudo apt update && sudo apt upgrade -y
@@ -49,7 +43,8 @@ print_status "Nginx installed"
 # Check if .env file exists
 if [ ! -f .env ]; then
     print_error ".env file not found"
-    print_info "Please create .env file from .env.example and configure BACKEND_EC2_IP"
+    print_info "Please create .env file from .env.example"
+    print_info "Set VITE_BACKEND_URL to your Frontend EC2 PUBLIC IP (e.g., http://52.24.187.55)"
     exit 1
 fi
 
@@ -60,6 +55,7 @@ print_status ".env file loaded"
 # Install dependencies
 print_info "Installing frontend dependencies..."
 npm install
+npm install -D terser
 print_status "Dependencies installed"
 
 # Build frontend
@@ -77,10 +73,15 @@ print_status "Frontend deployed"
 
 # Configure Nginx
 print_info "Configuring Nginx..."
-if [ ! -z "$VITE_BACKEND_URL" ]; then
-    # Extract IP from BACKEND_URL
-    BACKEND_IP=$(echo $VITE_BACKEND_URL | sed 's/http:\/\///' | sed 's/:3000//')
-    
+
+# We need the backend PRIVATE IP for nginx proxy, not the public frontend IP
+# Backend EC2 private IP should be provided via environment or discovered
+if [ -z "$BACKEND_PRIVATE_IP" ]; then
+    print_info "BACKEND_PRIVATE_IP not set, please provide it:"
+    read -p "Enter Backend EC2 Private IP: " BACKEND_PRIVATE_IP
+fi
+
+if [ ! -z "$BACKEND_PRIVATE_IP" ]; then
     # Get EC2 public IP using IMDSv2
     TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" \
       -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
@@ -90,7 +91,7 @@ if [ ! -z "$VITE_BACKEND_URL" ]; then
     
     # Update nginx config with backend IP
     sudo cp nginx.conf /etc/nginx/sites-available/bmi-frontend
-    sudo sed -i "s/BACKEND_EC2_PRIVATE_IP/$BACKEND_IP/g" /etc/nginx/sites-available/bmi-frontend
+    sudo sed -i "s/BACKEND_EC2_PRIVATE_IP/$BACKEND_PRIVATE_IP/g" /etc/nginx/sites-available/bmi-frontend
     sudo sed -i "s/YOUR_FRONTEND_DOMAIN_OR_IP/$PUBLIC_IP/g" /etc/nginx/sites-available/bmi-frontend
     
     # Enable site
@@ -102,7 +103,7 @@ if [ ! -z "$VITE_BACKEND_URL" ]; then
     sudo systemctl reload nginx
     print_status "Nginx configured and reloaded"
 else
-    print_error "VITE_BACKEND_URL not set in .env file"
+    print_error "BACKEND_PRIVATE_IP not provided"
     exit 1
 fi
 
