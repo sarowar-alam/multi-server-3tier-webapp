@@ -2,7 +2,7 @@ module.exports = {
   apps: [{
     name: 'bmi-backend',
     script: './src/server.js',
-    cwd: '/home/ubuntu/backend-ec2',
+    cwd: './',
     instances: 1,
     autorestart: true,
     watch: false,
