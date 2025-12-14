@@ -4,6 +4,22 @@
 
 I've successfully created a complete **multiple EC2 deployment structure** for your BMI Health Tracker application. The project has been organized into a new folder called `multiple-ec2-3tier-webapp` with all necessary files for deploying across three separate Ubuntu EC2 instances.
 
+## 🔗 GitHub Repository
+
+**Repository**: https://github.com/sarowar-alam/multi-server-3tier-webapp.git
+
+The project is version-controlled and hosted on GitHub, making it easy to:
+- Clone directly on EC2 instances
+- Track changes and updates
+- Collaborate and share
+- Roll back if needed
+
+```bash
+# Clone the repository
+git clone https://github.com/sarowar-alam/multi-server-3tier-webapp.git
+cd multi-server-3tier-webapp
+```
+
 ## 🗂️ Folder Structure
 
 ```
@@ -109,18 +125,24 @@ The application has been converted to a **3-tier architecture** designed for AWS
 ### Quick Deployment Steps
 
 1. **Launch 3 EC2 Instances**:
-   - Frontend EC2 (Public Subnet, Ubuntu 22.04)
-   - Backend EC2 (Private Subnet, Ubuntu 22.04)
-   - Database EC2 (Private Subnet, Ubuntu 22.04)
+   - Frontend EC2 (Public Subnet, Ubuntu 24.04)
+   - Backend EC2 (Private Subnet, Ubuntu 24.04)
+   - Database EC2 (Private Subnet, Ubuntu 24.04)
 
-2. **Deploy Database First**:
+2. **Clone Repository on Each Instance**:
+   ```bash
+   git clone https://github.com/sarowar-alam/multi-server-3tier-webapp.git
+   cd multi-server-3tier-webapp
+   ```
+
+3. **Deploy Database First**:
    ```bash
    cd database-ec2
    chmod +x setup-database.sh
    ./setup-database.sh
    ```
 
-3. **Deploy Backend Second**:
+4. **Deploy Backend Second**:
    ```bash
    cd backend-ec2
    cp .env.example .env
@@ -129,7 +151,7 @@ The application has been converted to a **3-tier architecture** designed for AWS
    ./deploy-backend.sh
    ```
 
-4. **Deploy Frontend Last**:
+5. **Deploy Frontend Last**:
    ```bash
    cd frontend-ec2
    cp .env.example .env

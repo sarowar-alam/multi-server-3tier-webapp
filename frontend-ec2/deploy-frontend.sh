@@ -81,10 +81,17 @@ if [ ! -z "$VITE_BACKEND_URL" ]; then
     # Extract IP from BACKEND_URL
     BACKEND_IP=$(echo $VITE_BACKEND_URL | sed 's/http:\/\///' | sed 's/:3000//')
     
+    # Get EC2 public IP using IMDSv2
+    TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" \
+      -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+    PUBLIC_IP=$(curl -s \
+      -H "X-aws-ec2-metadata-token: $TOKEN" \
+      http://169.254.169.254/latest/meta-data/public-ipv4)
+    
     # Update nginx config with backend IP
     sudo cp nginx.conf /etc/nginx/sites-available/bmi-frontend
     sudo sed -i "s/BACKEND_EC2_PRIVATE_IP/$BACKEND_IP/g" /etc/nginx/sites-available/bmi-frontend
-    sudo sed -i "s/YOUR_FRONTEND_DOMAIN_OR_IP/$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)/g" /etc/nginx/sites-available/bmi-frontend
+    sudo sed -i "s/YOUR_FRONTEND_DOMAIN_OR_IP/$PUBLIC_IP/g" /etc/nginx/sites-available/bmi-frontend
     
     # Enable site
     sudo ln -sf /etc/nginx/sites-available/bmi-frontend /etc/nginx/sites-enabled/
@@ -111,7 +118,17 @@ echo -e "${GREEN}================================${NC}"
 echo -e "${GREEN}✓ Frontend Deployment Complete!${NC}"
 echo -e "${GREEN}================================${NC}"
 echo ""
-echo "Frontend URL: http://$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)"
+
+# Get EC2 public IP using IMDSv2 (reuse token if within TTL, or get new one)
+if [ -z "$PUBLIC_IP" ]; then
+    TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" \
+      -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+    PUBLIC_IP=$(curl -s \
+      -H "X-aws-ec2-metadata-token: $TOKEN" \
+      http://169.254.169.254/latest/meta-data/public-ipv4)
+fi
+
+echo "Frontend URL: http://$PUBLIC_IP"
 echo ""
 echo "Next Steps:"
 echo "1. Access the application in your browser"

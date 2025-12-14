@@ -8,9 +8,9 @@ This guide provides step-by-step instructions for deploying the BMI Health Track
 
 1. [Prerequisites](#prerequisites)
 2. [AWS Infrastructure Setup](#aws-infrastructure-setup)
-3. [Database EC2 Deployment](#database-ec2-deployment)
-4. [Backend EC2 Deployment](#backend-ec2-deployment)
-5. [Frontend EC2 Deployment](#frontend-ec2-deployment)
+3. [Frontend EC2 Deployment](#frontend-ec2-deployment)
+4. [Database EC2 Deployment](#database-ec2-deployment)
+5. [Backend EC2 Deployment](#backend-ec2-deployment)
 6. [Post-Deployment Verification](#post-deployment-verification)
 7. [Troubleshooting Guide](#troubleshooting-guide)
 
@@ -39,87 +39,90 @@ This guide provides step-by-step instructions for deploying the BMI Health Track
 - Understanding of SSH connections
 - Basic networking concepts (IP addresses, ports)
 
+### GitHub Repository
+
+This project is hosted on GitHub:
+
+**Repository**: https://github.com/sarowar-alam/multi-server-3tier-webapp.git
+
+You'll clone this repository on each EC2 instance during deployment.
+
 ---
 
 ## AWS Infrastructure Setup
 
-### Step 1: Create VPC (if needed)
+### Step 1: Verify Existing VPC Infrastructure
 
-1. **Navigate to VPC Console**
-   - Go to AWS Console → VPC
-   - Click "Create VPC"
+**Note**: You already have an existing VPC infrastructure. We'll use your existing resources.
 
-2. **Configure VPC**
-   - Name: `bmi-tracker-vpc`
-   - IPv4 CIDR block: `10.0.0.0/16`
-   - Create VPC
+**Your Existing VPC Setup**:
+- **VPC**: `ostad-batch-08-vpc` (10.0.0.0/16)
+- **Region**: us-west-2 (Oregon)
 
-3. **Create Subnets**
+**Your Existing Subnets**:
    
-   **Public Subnet** (for Frontend):
-   - Name: `bmi-public-subnet`
-   - VPC: `bmi-tracker-vpc`
-   - CIDR: `10.0.1.0/24`
+   **Public Subnet 1** (for Frontend):
+   - Name: `ostad-batch-08-subnet-public1-us-west-2a`
+   - Availability Zone: us-west-2a
+   - CIDR: `10.0.0.0/20`
    - Auto-assign public IPv4: Yes
    
+   **Public Subnet 2** (Alternative):
+   - Name: `ostad-batch-08-subnet-public2-us-west-2b`
+   - Availability Zone: us-west-2b
+   - CIDR: `10.0.16.0/20`
+   
    **Private Subnet 1** (for Backend):
-   - Name: `bmi-private-subnet-1`
-   - VPC: `bmi-tracker-vpc`
-   - CIDR: `10.0.2.0/24`
+   - Name: `ostad-batch-08-subnet-private1-us-west-2a`
+   - Availability Zone: us-west-2a
+   - CIDR: `10.0.128.0/20`
    
    **Private Subnet 2** (for Database):
-   - Name: `bmi-private-subnet-2`
-   - VPC: `bmi-tracker-vpc`
-   - CIDR: `10.0.3.0/24`
+   - Name: `ostad-batch-08-subnet-private2-us-west-2b`
+   - Availability Zone: us-west-2b
+   - CIDR: `10.0.144.0/20`
 
-4. **Create Internet Gateway**
-   - Name: `bmi-igw`
-   - Attach to `bmi-tracker-vpc`
+**Your Existing Network Components**:
+   - **Internet Gateway**: `ostad-batch-08-igw`
+   - **NAT Gateway**: `ostad-batch-08-nat-public1-us-west-2a`
+   - **VPC Endpoint**: `ostad-batch-08-vpce-s3` (S3 Gateway Endpoint)
 
-5. **Create NAT Gateway** (for private subnets to access internet)
-   - Subnet: `bmi-public-subnet`
-   - Allocate Elastic IP
-   - Name: `bmi-nat-gateway`
-
-6. **Configure Route Tables**
-   
-   **Public Route Table**:
-   - Associate with `bmi-public-subnet`
-   - Add route: `0.0.0.0/0` → Internet Gateway
-   
-   **Private Route Table**:
-   - Associate with `bmi-private-subnet-1` and `bmi-private-subnet-2`
-   - Add route: `0.0.0.0/0` → NAT Gateway
+**Your Existing Route Tables**:
+   - **Public Route Table**: `ostad-batch-08-rtb-public`
+   - **Private Route Table 1**: `ostad-batch-08-rtb-private1-us-west-2a`
+   - **Private Route Table 2**: `ostad-batch-08-rtb-private2-us-west-2b`
 
 #### ✅ VALIDATION CHECKPOINT 1: VPC and Network Setup
 
 Before proceeding, verify your VPC configuration:
 
-**1. Verify VPC Created**
+**1. Verify VPC Exists**
 ```bash
 # In AWS Console: VPC → Your VPCs
-# Check: bmi-tracker-vpc exists with CIDR 10.0.0.0/16
+✓ ostad-batch-08-vpc exists with CIDR 10.0.0.0/16
+✓ Region: us-west-2
 ```
 
 **2. Verify Subnets**
 ```bash
 # In AWS Console: VPC → Subnets
-# Verify 3 subnets exist:
-✓ bmi-public-subnet (10.0.1.0/24) - Auto-assign public IPv4: Yes
-✓ bmi-private-subnet-1 (10.0.2.0/24)
-✓ bmi-private-subnet-2 (10.0.3.0/24)
+# Verify 4 subnets exist:
+✓ ostad-batch-08-subnet-public1-us-west-2a (10.0.0.0/20) - Auto-assign public IPv4: Yes
+✓ ostad-batch-08-subnet-public2-us-west-2b (10.0.16.0/20)
+✓ ostad-batch-08-subnet-private1-us-west-2a (10.0.128.0/20)
+✓ ostad-batch-08-subnet-private2-us-west-2b (10.0.144.0/20)
 ```
 
 **3. Verify Internet Gateway**
 ```bash
 # In AWS Console: VPC → Internet Gateways
-✓ bmi-igw is attached to bmi-tracker-vpc
+✓ ostad-batch-08-igw is attached to ostad-batch-08-vpc
 ```
 
 **4. Verify NAT Gateway**
 ```bash
 # In AWS Console: VPC → NAT Gateways
-✓ bmi-nat-gateway is in bmi-public-subnet
+✓ ostad-batch-08-nat-public1-us-west-2a is in public subnet
 ✓ Status: Available
 ✓ Has Elastic IP associated
 ```
@@ -128,13 +131,13 @@ Before proceeding, verify your VPC configuration:
 ```bash
 # In AWS Console: VPC → Route Tables
 
-# Public Route Table:
-✓ Associated with bmi-public-subnet
-✓ Has route: 0.0.0.0/0 → Internet Gateway
+# Public Route Table (ostad-batch-08-rtb-public):
+✓ Associated with both public subnets
+✓ Has route: 0.0.0.0/0 → ostad-batch-08-igw
 
-# Private Route Table:
-✓ Associated with bmi-private-subnet-1 and bmi-private-subnet-2
-✓ Has route: 0.0.0.0/0 → NAT Gateway
+# Private Route Tables:
+✓ ostad-batch-08-rtb-private1-us-west-2a - Has route to NAT Gateway
+✓ ostad-batch-08-rtb-private2-us-west-2b - Has route to NAT Gateway
 ```
 
 **✅ All checks passed? Proceed to Step 2**  
@@ -149,7 +152,7 @@ Before proceeding, verify your VPC configuration:
 1. **Create Security Group**
    - Name: `bmi-frontend-sg`
    - Description: Frontend web server security group
-   - VPC: `bmi-tracker-vpc`
+   - VPC: `ostad-batch-08-vpc`
 
 2. **Inbound Rules**
    ```
@@ -172,7 +175,7 @@ Before proceeding, verify your VPC configuration:
 1. **Create Security Group**
    - Name: `bmi-backend-sg`
    - Description: Backend API server security group
-   - VPC: `bmi-tracker-vpc`
+   - VPC: `ostad-batch-08-vpc`
 
 2. **Inbound Rules**
    ```
@@ -194,7 +197,7 @@ Before proceeding, verify your VPC configuration:
 1. **Create Security Group**
    - Name: `bmi-database-sg`
    - Description: Database server security group
-   - VPC: `bmi-tracker-vpc`
+   - VPC: `ostad-batch-08-vpc`
 
 2. **Inbound Rules**
    ```
@@ -259,6 +262,17 @@ Outbound Rules:
 
 ---
 
+### Important: Deployment Strategy
+
+**Note**: Since you don't have a bastion host, we'll deploy in this order:
+1. **Frontend EC2 first** (public subnet - has public IP)
+2. **Database EC2 second** (private subnet - access via Frontend)
+3. **Backend EC2 last** (private subnet - access via Frontend)
+
+The Frontend EC2 will serve as a **jump server** to access Database and Backend instances in private subnets.
+
+---
+
 ### Step 3: Create EC2 Key Pair
 
 1. Go to EC2 Console → Key Pairs
@@ -298,12 +312,141 @@ head -n 1 bmi-tracker-key.pem
 # Output should be: -----BEGIN RSA PRIVATE KEY-----
 ```
 
-**✅ Key pair ready? Proceed to Database EC2 Deployment**  
+**✅ Key pair ready? Proceed to Frontend EC2 Deployment**  
 **❌ Issues with key pair? Recreate it**
 
 ---
 
+## Frontend EC2 Deployment
+
+**Note**: We're deploying Frontend first because it's in the public subnet and will serve as our jump server to access the private instances (Database and Backend).
+
+### Step 1: Launch Frontend EC2 Instance
+
+1. **Navigate to EC2 Console**
+   - Click "Launch Instance"
+
+2. **Configure Instance**
+   - Name: `bmi-frontend-ec2`
+   - AMI: Ubuntu Server 24.04 LTS
+   - Instance type: t2.micro
+   
+3. **Network Settings**
+   - VPC: `ostad-batch-08-vpc`
+   - Subnet: `ostad-batch-08-subnet-public1-us-west-2a`
+   - Availability Zone: us-west-2a
+   - Auto-assign public IP: Enable
+   - Security group: `bmi-frontend-sg`
+   
+4. **Storage**
+   - Size: 8 GB (default)
+   - Volume type: gp3
+   
+5. **Key Pair**
+   - Select: `bmi-tracker-key`
+   
+6. **Launch Instance**
+
+7. **Note Public IP**: Example: `54.123.45.67`
+
+### Step 2: Allocate and Associate Elastic IP (Recommended)
+
+1. **Allocate Elastic IP**
+   - Go to EC2 → Elastic IPs
+   - Click "Allocate Elastic IP address"
+   - Click "Allocate"
+
+2. **Associate with Frontend EC2**
+   - Select the new Elastic IP
+   - Actions → Associate Elastic IP address
+   - Instance: `bmi-frontend-ec2`
+   - Click "Associate"
+
+3. **Note Elastic IP**: Example: `52.123.45.67`
+
+#### ✅ VALIDATION CHECKPOINT 4: Frontend EC2 Launch
+
+**1. Verify Instance Running**
+```bash
+# In AWS Console: EC2 → Instances
+✓ Instance Name: bmi-frontend-ec2
+✓ Instance State: Running
+✓ Status Checks: 2/2 checks passed (wait 2-3 minutes)
+```
+
+**2. Verify Instance Configuration**
+```bash
+✓ AMI: Ubuntu Server 24.04 LTS
+✓ Instance Type: t2.micro
+✓ VPC: ostad-batch-08-vpc
+✓ Subnet: ostad-batch-08-subnet-public1-us-west-2a (10.0.0.0/20)
+✓ Availability Zone: us-west-2a
+✓ Auto-assign Public IP: Yes (or Elastic IP associated)
+✓ Security Group: bmi-frontend-sg
+✓ Key Pair: bmi-tracker-key
+```
+
+**3. Verify Elastic IP**
+```bash
+# In AWS Console: EC2 → Elastic IPs
+✓ Elastic IP is allocated
+✓ Associated with bmi-frontend-ec2
+✓ Status: Associated
+```
+
+**4. Test SSH Connection**
+```bash
+# From your local machine
+ssh -i bmi-tracker-key.pem ubuntu@FRONTEND_ELASTIC_IP
+
+# If successful, you should be connected to the instance
+ubuntu@ip-10-0-0-10:~$
+```
+
+**5. Document Frontend Details**
+```bash
+Frontend Public IP: ___________________
+Frontend Elastic IP: ___________________
+Frontend Private IP: ___________________
+```
+
+**✅ Can SSH to frontend? Proceed to Step 3**  
+**❌ Cannot connect?**
+- Check Security Group allows SSH from your IP
+- Verify key pair permissions (should be 400)
+- Confirm instance is in public subnet
+- Check Elastic IP is associated
+
+---
+
+### Step 3: Clone Repository and Setup SSH Key
+
+```bash
+# Connect to Frontend EC2
+ssh -i bmi-tracker-key.pem ubuntu@FRONTEND_ELASTIC_IP
+
+# Clone the project repository
+git clone https://github.com/sarowar-alam/multi-server-3tier-webapp.git
+cd multi-server-3tier-webapp
+```
+
+**Copy SSH key to Frontend EC2 (needed to access private instances):**
+```bash
+# From your local machine
+scp -i bmi-tracker-key.pem bmi-tracker-key.pem ubuntu@FRONTEND_ELASTIC_IP:~/.ssh/
+
+# On Frontend EC2, set correct permissions
+ssh -i bmi-tracker-key.pem ubuntu@FRONTEND_ELASTIC_IP
+chmod 400 ~/.ssh/bmi-tracker-key.pem
+```
+
+**✅ Files uploaded and key copied? Frontend EC2 is now ready to be your jump server!**
+
+---
+
 ## Database EC2 Deployment
+
+**Note**: Now that Frontend EC2 is running, we'll use it as a jump server to access and configure the Database EC2 in the private subnet.
 
 ### Step 1: Launch Database EC2 Instance
 
@@ -312,13 +455,14 @@ head -n 1 bmi-tracker-key.pem
 
 2. **Configure Instance**
    - Name: `bmi-database-ec2`
-   - AMI: Ubuntu Server 22.04 LTS (HVM), SSD Volume Type
+   - AMI: Ubuntu Server 24.04 LTS (HVM), SSD Volume Type
    - Architecture: 64-bit (x86)
    - Instance type: t2.micro (Free tier eligible)
    
 3. **Network Settings**
-   - VPC: `bmi-tracker-vpc`
-   - Subnet: `bmi-private-subnet-2`
+   - VPC: `ostad-batch-08-vpc`
+   - Subnet: `ostad-batch-08-subnet-private2-us-west-2b`
+   - Availability Zone: us-west-2b
    - Auto-assign public IP: Disable
    - Security group: `bmi-database-sg`
    
@@ -334,9 +478,9 @@ head -n 1 bmi-tracker-key.pem
 7. **Note Private IP Address**
    - Go to instance details
    - Note the "Private IPv4 addresses"
-   - Example: `10.0.3.15`
+   - Example: `10.0.144.15`
 
-#### ✅ VALIDATION CHECKPOINT 4: Database EC2 Launch
+#### ✅ VALIDATION CHECKPOINT 5: Database EC2 Launch
 
 **1. Verify Instance Running**
 ```bash
@@ -348,10 +492,11 @@ head -n 1 bmi-tracker-key.pem
 
 **2. Verify Instance Configuration**
 ```bash
-✓ AMI: Ubuntu Server 22.04 LTS
+✓ AMI: Ubuntu Server 24.04 LTS
 ✓ Instance Type: t2.micro
-✓ VPC: bmi-tracker-vpc
-✓ Subnet: bmi-private-subnet-2 (10.0.3.0/24)
+✓ VPC: ostad-batch-08-vpc
+✓ Subnet: ostad-batch-08-subnet-private2-us-west-2b (10.0.144.0/20)
+✓ Availability Zone: us-west-2b
 ✓ Auto-assign Public IP: No
 ✓ Security Group: bmi-database-sg
 ✓ Key Pair: bmi-tracker-key
@@ -361,7 +506,7 @@ head -n 1 bmi-tracker-key.pem
 ```bash
 # Write down the Private IPv4 address
 Database EC2 Private IP: ___________________
-Example: 10.0.3.15
+Example: 10.0.144.15
 ```
 
 **✅ Instance running and configured correctly? Proceed to Step 2**  
@@ -369,38 +514,38 @@ Example: 10.0.3.15
 
 ---
 
-### Step 2: Connect to Database EC2
+### Step 2: Connect to Database EC2 via Frontend Jump Server
 
-Since this is in a private subnet, you'll need a bastion host or use Session Manager:
-
-**Option A: Using Bastion Host**
+**Method 1: Direct SSH Jump (Recommended)**
 ```bash
-# Connect to bastion first
-ssh -i bmi-tracker-key.pem ubuntu@BASTION_PUBLIC_IP
+# From your local machine - Direct jump through Frontend
+ssh -i bmi-tracker-key.pem -J ubuntu@FRONTEND_ELASTIC_IP ubuntu@DATABASE_PRIVATE_IP
 
-# Then connect to database EC2
-ssh ubuntu@DATABASE_PRIVATE_IP
+# You should now be connected to Database EC2
+ubuntu@ip-10-0-144-15:~$
 ```
 
-**Option B: Using AWS Session Manager**
-1. Ensure EC2 has SSM agent (Ubuntu 22.04 has it by default)
-2. Use AWS Console → EC2 → Connect → Session Manager
+**Method 2: Two-Step SSH**
+```bash
+# From your local machine - Connect to Frontend first
+ssh -i bmi-tracker-key.pem ubuntu@FRONTEND_ELASTIC_IP
 
-### Step 3: Upload Database Files
+# From Frontend EC2 - Connect to Database EC2
+ssh -i ~/.ssh/bmi-tracker-key.pem ubuntu@DATABASE_PRIVATE_IP
+
+# You should now be connected to Database EC2
+ubuntu@ip-10-0-144-15:~$
+```
+
+### Step 3: Clone Repository on Database EC2
 
 ```bash
-# From your local machine
-# First, upload to bastion or use S3
+# Connect to Database EC2 via Frontend jump server
+ssh -i bmi-tracker-key.pem -J ubuntu@FRONTEND_ELASTIC_IP ubuntu@DATABASE_PRIVATE_IP
 
-# Option 1: Via Bastion
-scp -i bmi-tracker-key.pem -r database-ec2/ ubuntu@BASTION_IP:~/
-ssh -i bmi-tracker-key.pem ubuntu@BASTION_IP
-scp -r database-ec2/ ubuntu@DATABASE_PRIVATE_IP:~/
-
-# Option 2: Via S3
-aws s3 cp database-ec2/ s3://your-bucket/database-ec2/ --recursive
-# Then from Database EC2:
-aws s3 cp s3://your-bucket/database-ec2/ ~/database-ec2/ --recursive
+# Clone the project repository
+git clone https://github.com/sarowar-alam/multi-server-3tier-webapp.git
+cd multi-server-3tier-webapp/database-ec2
 ```
 
 ### Step 4: Run Database Setup Script
@@ -447,7 +592,7 @@ SELECT * FROM measurements;
 \q
 ```
 
-#### ✅ VALIDATION CHECKPOINT 5: Database EC2 Complete
+#### ✅ VALIDATION CHECKPOINT 6: Database EC2 Complete
 
 **1. Verify PostgreSQL Service**
 ```bash
@@ -503,9 +648,13 @@ Connection String: postgresql://bmi_user:PASSWORD@PRIVATE_IP:5432/bmidb
 **✅ All database checks passed? Proceed to Backend EC2**  
 **❌ Any failures? Review logs and troubleshoot before continuing**
 
+**Note**: Keep the database connection string handy - you'll need it for Backend configuration!
+
 ---
 
 ## Backend EC2 Deployment
+
+**Note**: We'll continue using Frontend EC2 as a jump server to access and configure the Backend EC2 in the private subnet.
 
 ### Step 1: Launch Backend EC2 Instance
 
@@ -514,12 +663,13 @@ Connection String: postgresql://bmi_user:PASSWORD@PRIVATE_IP:5432/bmidb
 
 2. **Configure Instance**
    - Name: `bmi-backend-ec2`
-   - AMI: Ubuntu Server 22.04 LTS
+   - AMI: Ubuntu Server 24.04 LTS
    - Instance type: t2.micro
    
 3. **Network Settings**
-   - VPC: `bmi-tracker-vpc`
-   - Subnet: `bmi-private-subnet-1`
+   - VPC: `ostad-batch-08-vpc`
+   - Subnet: `ostad-batch-08-subnet-private1-us-west-2a`
+   - Availability Zone: us-west-2a
    - Auto-assign public IP: Disable
    - Security group: `bmi-backend-sg`
    
@@ -529,7 +679,7 @@ Connection String: postgresql://bmi_user:PASSWORD@PRIVATE_IP:5432/bmidb
 
 6. **Note Private IP**: Example: `10.0.2.20`
 
-#### ✅ VALIDATION CHECKPOINT 6: Backend EC2 Launch
+#### ✅ VALIDATION CHECKPOINT 7: Backend EC2 Launch
 
 **1. Verify Instance Running**
 ```bash
@@ -541,10 +691,11 @@ Connection String: postgresql://bmi_user:PASSWORD@PRIVATE_IP:5432/bmidb
 
 **2. Verify Instance Configuration**
 ```bash
-✓ AMI: Ubuntu Server 22.04 LTS
+✓ AMI: Ubuntu Server 24.04 LTS
 ✓ Instance Type: t2.micro
-✓ VPC: bmi-tracker-vpc
-✓ Subnet: bmi-private-subnet-1 (10.0.2.0/24)
+✓ VPC: ostad-batch-08-vpc
+✓ Subnet: ostad-batch-08-subnet-private1-us-west-2a (10.0.128.0/20)
+✓ Availability Zone: us-west-2a
 ✓ Auto-assign Public IP: No
 ✓ Security Group: bmi-backend-sg
 ✓ Key Pair: bmi-tracker-key
@@ -553,26 +704,51 @@ Connection String: postgresql://bmi_user:PASSWORD@PRIVATE_IP:5432/bmidb
 **3. Note Private IP**
 ```bash
 Backend EC2 Private IP: ___________________
-Example: 10.0.2.20
+Example: 10.0.128.20
 ```
 
 **✅ Instance configured correctly? Proceed to Step 2**
 
 ---
 
-### Step 2: Upload Backend Files
+### Step 2: Connect to Backend EC2 via Frontend Jump Server
 
+**Method 1: Direct SSH Jump (Recommended)**
 ```bash
-# Upload via bastion or S3 (similar to database)
-scp -i bmi-tracker-key.pem -r backend-ec2/ ubuntu@BASTION_IP:~/
-ssh -i bmi-tracker-key.pem ubuntu@BASTION_IP
-scp -r backend-ec2/ ubuntu@BACKEND_PRIVATE_IP:~/
+# From your local machine - Direct jump through Frontend
+ssh -i bmi-tracker-key.pem -J ubuntu@FRONTEND_ELASTIC_IP ubuntu@BACKEND_PRIVATE_IP
+
+# You should now be connected to Backend EC2
+ubuntu@ip-10-0-128-20:~$
 ```
 
-### Step 3: Configure Backend Environment
+**Method 2: Two-Step SSH**
+```bash
+# From your local machine - Connect to Frontend first
+ssh -i bmi-tracker-key.pem ubuntu@FRONTEND_ELASTIC_IP
+
+# From Frontend EC2 - Connect to Backend EC2
+ssh -i ~/.ssh/bmi-tracker-key.pem ubuntu@BACKEND_PRIVATE_IP
+
+# You should now be connected to Backend EC2
+ubuntu@ip-10-0-128-20:~$
+```
+
+### Step 3: Clone Repository on Backend EC2
 
 ```bash
-# Connect to Backend EC2
+# Connect to Backend EC2 via Frontend jump server
+ssh -i bmi-tracker-key.pem -J ubuntu@FRONTEND_ELASTIC_IP ubuntu@BACKEND_PRIVATE_IP
+
+# Clone the project repository
+git clone https://github.com/sarowar-alam/multi-server-3tier-webapp.git
+cd multi-server-3tier-webapp/backend-ec2
+```
+
+### Step 4: Configure Backend Environment
+
+```bash
+# Connect to Backend EC2 (via Frontend jump server)
 cd ~/backend-ec2
 cp .env.example .env
 nano .env
@@ -583,8 +759,8 @@ nano .env
 PORT=3000
 NODE_ENV=production
 
-# Use Database EC2 Private IP
-DATABASE_URL=postgresql://bmi_user:BMI@Tracker2025!@10.0.3.15:5432/bmidb
+# Use Database EC2 Private IP (from 10.0.144.0/20 subnet)
+DATABASE_URL=postgresql://bmi_user:BMI@Tracker2025!@10.0.144.15:5432/bmidb
 
 # Use Frontend EC2 Public IP (will get this in next section)
 FRONTEND_URL=http://FRONTEND_PUBLIC_IP
@@ -592,7 +768,7 @@ FRONTEND_URL=http://FRONTEND_PUBLIC_IP
 
 Save and exit (Ctrl+X, Y, Enter)
 
-### Step 4: Test Database Connection
+### Step 5: Test Database Connection
 
 ```bash
 # Install PostgreSQL client
@@ -610,7 +786,7 @@ If successful, you should see:
         1
 ```
 
-#### ✅ VALIDATION CHECKPOINT 7: Backend Database Connection
+#### ✅ VALIDATION CHECKPOINT 8: Backend Database Connection
 
 **1. Test Database Connectivity**
 ```bash
@@ -645,7 +821,7 @@ nc -zv DATABASE_PRIVATE_IP 5432
 
 ---
 
-### Step 5: Deploy Backend
+### Step 6: Deploy Backend
 
 ```bash
 chmod +x deploy-backend.sh
@@ -661,7 +837,7 @@ The script will:
 6. Start backend with PM2
 7. Configure firewall
 
-### Step 6: Verify Backend Deployment
+### Step 7: Verify Backend Deployment
 
 ```bash
 # Check PM2 status
@@ -686,7 +862,7 @@ Expected health response:
 }
 ```
 
-#### ✅ VALIDATION CHECKPOINT 8: Backend EC2 Complete
+#### ✅ VALIDATION CHECKPOINT 9: Backend EC2 Complete
 
 **1. Verify PM2 Process**
 ```bash
@@ -749,7 +925,7 @@ Backend Port: 3000
 Backend Health URL: http://PRIVATE_IP:3000/health
 ```
 
-**✅ All backend checks passed? Proceed to Frontend EC2**  
+**✅ All backend checks passed? Proceed to Frontend Deployment**  
 **❌ Any failures?**
 - Check PM2 logs: `pm2 logs bmi-backend`
 - Verify database connection
@@ -758,141 +934,48 @@ Backend Health URL: http://PRIVATE_IP:3000/health
 
 ---
 
-## Frontend EC2 Deployment
+## Frontend EC2 Application Deployment
 
-### Step 1: Launch Frontend EC2 Instance
+**Note**: Frontend EC2 is already running and has been used as a jump server. Now we'll deploy the actual web application on it.
 
-1. **Navigate to EC2 Console**
-   - Click "Launch Instance"
-
-2. **Configure Instance**
-   - Name: `bmi-frontend-ec2`
-   - AMI: Ubuntu Server 22.04 LTS
-   - Instance type: t2.micro
-   
-3. **Network Settings**
-   - VPC: `bmi-tracker-vpc`
-   - Subnet: `bmi-public-subnet`
-   - Auto-assign public IP: Enable
-   - Security group: `bmi-frontend-sg`
-   
-4. **Key Pair**: `bmi-tracker-key`
-   
-5. **Launch Instance**
-
-6. **Note Public IP**: Example: `54.123.45.67`
-
-### Step 2: Allocate and Associate Elastic IP (Recommended)
-
-1. **Allocate Elastic IP**
-   - Go to EC2 → Elastic IPs
-   - Click "Allocate Elastic IP address"
-   - Click "Allocate"
-
-2. **Associate with Frontend EC2**
-   - Select the new Elastic IP
-   - Actions → Associate Elastic IP address
-   - Instance: `bmi-frontend-ec2`
-   - Click "Associate"
-
-3. **Note Elastic IP**: Example: `52.123.45.67`
-#### ✅ VALIDATION CHECKPOINT 9: Frontend EC2 Launch
-
-**1. Verify Instance Running**
-```bash
-# In AWS Console: EC2 → Instances
-✓ Instance Name: bmi-frontend-ec2
-✓ Instance State: Running
-✓ Status Checks: 2/2 checks passed
-```
-
-**2. Verify Instance Configuration**
-```bash
-✓ AMI: Ubuntu Server 22.04 LTS
-✓ Instance Type: t2.micro
-✓ VPC: bmi-tracker-vpc
-✓ Subnet: bmi-public-subnet (10.0.1.0/24)
-✓ Auto-assign Public IP: Yes (or Elastic IP associated)
-✓ Security Group: bmi-frontend-sg
-✓ Key Pair: bmi-tracker-key
-```
-
-**3. Verify Elastic IP**
-```bash
-# In AWS Console: EC2 → Elastic IPs
-✓ Elastic IP is allocated
-✓ Associated with bmi-frontend-ec2
-✓ Status: Associated
-```
-
-**4. Test SSH Connection**
-```bash
-# From your local machine
-ssh -i bmi-tracker-key.pem ubuntu@FRONTEND_ELASTIC_IP
-
-# If successful, you should be connected to the instance
-ubuntu@ip-10-0-1-10:~$
-```
-
-**5. Document Frontend Details**
-```bash
-Frontend Public IP: ___________________
-Frontend Elastic IP: ___________________
-Frontend Private IP: ___________________
-```
-
-**✅ Can SSH to frontend? Proceed to Step 3**  
-**❌ Cannot connect?**
-- Check Security Group allows SSH from your IP
-- Verify key pair permissions (should be 400)
-- Confirm instance is in public subnet
-- Check Elastic IP is associated
-
----
-### Step 3: Upload Frontend Files
+### Step 1: Update Backend with Frontend URL
 
 ```bash
-# From your local machine
-scp -i bmi-tracker-key.pem -r frontend-ec2/ ubuntu@FRONTEND_PUBLIC_IP:~/
-```
-
-### Step 4: Update Backend with Frontend URL
-
-```bash
-# Connect to Backend EC2
-ssh ubuntu@BACKEND_PRIVATE_IP
+# Connect to Backend EC2 via Frontend jump server
+ssh -i bmi-tracker-key.pem -J ubuntu@FRONTEND_ELASTIC_IP ubuntu@BACKEND_PRIVATE_IP
 
 # Update .env
 nano ~/backend-ec2/.env
 # Change FRONTEND_URL to Frontend's Elastic IP
-# FRONTEND_URL=http://52.123.45.67
+# FRONTEND_URL=http://YOUR_FRONTEND_ELASTIC_IP
 
 # Restart backend
 pm2 restart bmi-backend
 ```
 
-### Step 5: Configure Frontend Environment
+### Step 2: Configure Frontend Environment
 
 ```bash
 # Connect to Frontend EC2
-ssh -i bmi-tracker-key.pem ubuntu@FRONTEND_PUBLIC_IP
+ssh -i bmi-tracker-key.pem ubuntu@FRONTEND_ELASTIC_IP
 
-cd ~/frontend-ec2
+cd ~/multi-server-3tier-webapp/frontend-ec2
 cp .env.example .env
 nano .env
 ```
 
 **Edit .env file**:
 ```env
-# Use Backend EC2 Private IP
-VITE_BACKEND_URL=http://10.0.2.20:3000
+# Use Backend EC2 Private IP (from 10.0.128.0/20 subnet)
+VITE_BACKEND_URL=http://10.0.128.20:3000
 ```
 
 Save and exit
 
-### Step 6: Deploy Frontend
+### Step 3: Deploy Frontend Application
 
 ```bash
+# On Frontend EC2
 chmod +x deploy-frontend.sh
 ./deploy-frontend.sh
 ```
@@ -906,7 +989,7 @@ The script will:
 6. Configure Nginx with backend proxy
 7. Configure firewall
 
-### Step 7: Verify Frontend Deployment
+### Step 4: Verify Frontend Deployment
 
 ```bash
 # Check Nginx status
@@ -922,7 +1005,7 @@ curl http://localhost
 curl http://localhost/api/measurements
 ```
 
-#### ✅ VALIDATION CHECKPOINT 10: Frontend EC2 Complete
+#### ✅ VALIDATION CHECKPOINT 10: Frontend Application Deployed
 
 **1. Verify Nginx Service**
 ```bash

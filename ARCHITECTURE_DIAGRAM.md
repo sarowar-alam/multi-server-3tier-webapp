@@ -1,5 +1,14 @@
 # Architecture Diagram - Multiple EC2 3-Tier Deployment
 
+## GitHub Repository
+
+**Repository**: https://github.com/sarowar-alam/multi-server-3tier-webapp.git
+
+```bash
+git clone https://github.com/sarowar-alam/multi-server-3tier-webapp.git
+cd multi-server-3tier-webapp
+```
+
 ## Visual Architecture
 
 ```

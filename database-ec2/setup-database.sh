@@ -92,8 +92,14 @@ export PGPASSWORD=$DB_PASS
 psql -U $DB_USER -d $DB_NAME -h localhost -f migrations/001_create_measurements.sql
 print_status "Migrations completed"
 
-# Get EC2 private IP
-PRIVATE_IP=$(curl -s http://169.254.169.254/latest/meta-data/local-ipv4)
+# Get EC2 private IP using IMDSv2
+print_info "Retrieving EC2 metadata..."
+TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" \
+  -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+
+PRIVATE_IP=$(curl -s \
+  -H "X-aws-ec2-metadata-token: $TOKEN" \
+  http://169.254.169.254/latest/meta-data/local-ipv4)
 print_info "EC2 Private IP: $PRIVATE_IP"
 
 # Configure PostgreSQL for remote access

@@ -97,6 +97,22 @@ multiple-ec2-3tier-webapp/
 └── README.md             # This file
 ```
 
+## 📂 GitHub Repository
+
+This project is hosted on GitHub:
+
+**Repository**: https://github.com/sarowar-alam/multi-server-3tier-webapp.git
+
+### Clone the Repository
+
+```bash
+# Clone the repository
+git clone https://github.com/sarowar-alam/multi-server-3tier-webapp.git
+
+# Navigate to project directory
+cd multi-server-3tier-webapp
+```
+
 ## 🎯 Quick Start Deployment
 
 ### Step 1: Launch EC2 Instances
@@ -151,14 +167,14 @@ Inbound:
 ### Step 3: Deploy Database EC2
 
 ```bash
-# Connect to Database EC2
-ssh -i your-key.pem ubuntu@DATABASE_EC2_IP
+# Connect to Database EC2 (via Frontend jump server)
+ssh -i your-key.pem -J ubuntu@FRONTEND_EC2_IP ubuntu@DATABASE_EC2_IP
 
-# Upload files
-scp -i your-key.pem -r database-ec2/ ubuntu@DATABASE_EC2_IP:~/
+# Clone repository
+git clone https://github.com/sarowar-alam/multi-server-3tier-webapp.git
+cd multi-server-3tier-webapp/database-ec2
 
 # Run setup
-cd database-ec2
 chmod +x setup-database.sh
 ./setup-database.sh
 ```
@@ -168,14 +184,14 @@ chmod +x setup-database.sh
 ### Step 4: Deploy Backend EC2
 
 ```bash
-# Connect to Backend EC2
-ssh -i your-key.pem ubuntu@BACKEND_EC2_IP
+# Connect to Backend EC2 (via Frontend jump server)
+ssh -i your-key.pem -J ubuntu@FRONTEND_EC2_IP ubuntu@BACKEND_EC2_IP
 
-# Upload files
-scp -i your-key.pem -r backend-ec2/ ubuntu@BACKEND_EC2_IP:~/
+# Clone repository
+git clone https://github.com/sarowar-alam/multi-server-3tier-webapp.git
+cd multi-server-3tier-webapp/backend-ec2
 
 # Configure environment
-cd backend-ec2
 cp .env.example .env
 nano .env  # Update DATABASE_URL and FRONTEND_URL
 
@@ -190,11 +206,11 @@ chmod +x deploy-backend.sh
 # Connect to Frontend EC2
 ssh -i your-key.pem ubuntu@FRONTEND_EC2_PUBLIC_IP
 
-# Upload files
-scp -i your-key.pem -r frontend-ec2/ ubuntu@FRONTEND_EC2_PUBLIC_IP:~/
+# Clone repository
+git clone https://github.com/sarowar-alam/multi-server-3tier-webapp.git
+cd multi-server-3tier-webapp/frontend-ec2
 
 # Configure environment
-cd frontend-ec2
 cp .env.example .env
 nano .env  # Update VITE_BACKEND_URL
 

@@ -1,5 +1,15 @@
 # BMI Health Tracker - Database Configuration Notes
 
+## GitHub Repository
+
+**Repository**: https://github.com/sarowar-alam/multi-server-3tier-webapp.git
+
+```bash
+# Clone on Database EC2 instance
+git clone https://github.com/sarowar-alam/multi-server-3tier-webapp.git
+cd multi-server-3tier-webapp/database-ec2
+```
+
 ## PostgreSQL Configuration
 
 ### Database Details

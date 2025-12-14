@@ -10,6 +10,8 @@ A full-stack 3-tier web application for tracking Body Mass Index (BMI), Basal Me
 
 **Deployment Architecture**: 3 EC2 Instances (Frontend + Backend + Database)
 
+**GitHub Repository**: https://github.com/sarowar-alam/multi-server-3tier-webapp.git
+
 ---
 
 ## Architecture

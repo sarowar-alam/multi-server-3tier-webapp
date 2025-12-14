@@ -119,8 +119,16 @@ echo ""
 echo "Backend Status:"
 pm2 status
 echo ""
-echo "Backend API: http://$(curl -s http://169.254.169.254/latest/meta-data/local-ipv4):3000"
-echo "Health Check: http://$(curl -s http://169.254.169.254/latest/meta-data/local-ipv4):3000/health"
+
+# Get EC2 private IP using IMDSv2
+TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" \
+  -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+PRIVATE_IP=$(curl -s \
+  -H "X-aws-ec2-metadata-token: $TOKEN" \
+  http://169.254.169.254/latest/meta-data/local-ipv4)
+
+echo "Backend API: http://$PRIVATE_IP:3000"
+echo "Health Check: http://$PRIVATE_IP:3000/health"
 echo ""
 echo "Next Steps:"
 echo "1. Test health endpoint: curl http://localhost:3000/health"
