@@ -5,7 +5,7 @@
 
 set -e
 
-echo "🗄️  BMI Health Tracker - Database EC2 Setup"
+echo "BMI Health Tracker - Database EC2 Setup"
 echo "==========================================="
 
 # Colors
@@ -14,15 +14,9 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-print_status() { echo -e "${GREEN}✓${NC} $1"; }
-print_error() { echo -e "${RED}✗${NC} $1"; }
-print_info() { echo -e "${YELLOW}ℹ${NC} $1"; }
-
-# Check if running as root
-if [ "$EUID" -eq 0 ]; then 
-   print_error "Please do not run as root"
-   exit 1
-fi
+print_status() { echo -e "${GREEN}[OK]${NC} $1"; }
+print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+print_info() { echo -e "${YELLOW}[INFO]${NC} $1"; }
 
 # Database credentials
 DB_USER="bmi_user"
@@ -105,17 +99,22 @@ print_info "EC2 Private IP: $PRIVATE_IP"
 # Configure PostgreSQL for remote access
 print_info "Configuring PostgreSQL for remote access..."
 
+# Detect PostgreSQL version
+PG_VERSION=$(sudo ls /etc/postgresql/ | head -n 1)
+PG_CONF_DIR="/etc/postgresql/$PG_VERSION/main"
+print_info "Detected PostgreSQL version: $PG_VERSION"
+
 # Backup original configs
-sudo cp /etc/postgresql/*/main/postgresql.conf /etc/postgresql/*/main/postgresql.conf.backup
-sudo cp /etc/postgresql/*/main/pg_hba.conf /etc/postgresql/*/main/pg_hba.conf.backup
+sudo cp $PG_CONF_DIR/postgresql.conf $PG_CONF_DIR/postgresql.conf.backup
+sudo cp $PG_CONF_DIR/pg_hba.conf $PG_CONF_DIR/pg_hba.conf.backup
 
 # Update postgresql.conf to listen on all interfaces
-sudo sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '*'/" /etc/postgresql/*/main/postgresql.conf
+sudo sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '*'/" $PG_CONF_DIR/postgresql.conf
 
 # Update pg_hba.conf to allow connections from Backend EC2
 # Allow connections from private subnet (adjust CIDR as needed)
-echo "host    $DB_NAME    $DB_USER    10.0.0.0/16    md5" | sudo tee -a /etc/postgresql/*/main/pg_hba.conf
-echo "host    $DB_NAME    $DB_USER    172.31.0.0/16   md5" | sudo tee -a /etc/postgresql/*/main/pg_hba.conf
+echo "host    $DB_NAME    $DB_USER    10.0.0.0/16    md5" | sudo tee -a $PG_CONF_DIR/pg_hba.conf
+echo "host    $DB_NAME    $DB_USER    172.31.0.0/16   md5" | sudo tee -a $PG_CONF_DIR/pg_hba.conf
 
 print_status "PostgreSQL configured for remote access"
 
@@ -133,7 +132,7 @@ print_status "Firewall configured"
 
 echo ""
 echo -e "${GREEN}=====================================${NC}"
-echo -e "${GREEN}✓ Database EC2 Setup Complete!${NC}"
+echo -e "${GREEN}Database EC2 Setup Complete!${NC}"
 echo -e "${GREEN}=====================================${NC}"
 echo ""
 echo "Database Connection String:"

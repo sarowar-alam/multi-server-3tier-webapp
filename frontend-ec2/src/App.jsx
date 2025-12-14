@@ -38,7 +38,7 @@ export default function App() {
         {/* Add Measurement Card */}
         <div className="card">
           <div className="card-header">
-            <h2>📝 Add New Measurement</h2>
+            <h2>Add New Measurement</h2>
           </div>
           <MeasurementForm onSaved={load} />
         </div>
@@ -110,7 +110,7 @@ export default function App() {
         {/* Trend Chart Card */}
         <div className="card">
           <div className="card-header">
-            <h2>📈 30-Day BMI Trend</h2>
+            <h2>30-Day BMI Trend</h2>
           </div>
           <div className="chart-container">
             <TrendChart />

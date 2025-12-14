@@ -107,7 +107,7 @@ export default function MF({ onSaved }) {
       </div>
       
       <button type="submit" disabled={loading}>
-        {loading ? '⏳ Saving...' : '✓ Save Measurement'}
+        {loading ? 'Saving...' : 'Save Measurement'}
       </button>
     </form>
   );

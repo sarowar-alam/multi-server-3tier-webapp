@@ -5,7 +5,7 @@
 
 set -e
 
-echo "🚀 BMI Health Tracker - Backend EC2 Deployment"
+echo "BMI Health Tracker - Backend EC2 Deployment"
 echo "==============================================="
 
 # Colors
@@ -14,9 +14,9 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-print_status() { echo -e "${GREEN}✓${NC} $1"; }
-print_error() { echo -e "${RED}✗${NC} $1"; }
-print_info() { echo -e "${YELLOW}ℹ${NC} $1"; }
+print_status() { echo -e "${GREEN}[OK]${NC} $1"; }
+print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+print_info() { echo -e "${YELLOW}[INFO]${NC} $1"; }
 
 # Check if running as root
 if [ "$EUID" -eq 0 ]; then 

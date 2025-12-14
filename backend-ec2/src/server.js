@@ -45,7 +45,7 @@ app.use((err, req, res, next) => {
 
 // Start server - Listen on all interfaces for EC2
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📊 Environment: ${NODE_ENV}`);
-  console.log(`🔗 API available at: http://0.0.0.0:${PORT}/api`);
+  console.log(`Server running on port ${PORT}`);
+  console.log(`Environment: ${NODE_ENV}`);
+  console.log(`API available at: http://0.0.0.0:${PORT}/api`);
 });
